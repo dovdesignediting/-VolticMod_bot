@@ -81,7 +81,7 @@ export default async function handler(req, res) {
                                 `/unban או /בטל חסימה - ביטול חסימה\n` +
                                 `/mute או /השתק - השתקת משתמש\n` +
                                 `/unmute או /בטל השתקה - ביטול השתקה\n` +
-                                `/setrules [כללים] - הגדרת כללי הקבוצה ושמירה ב-Firebase`;
+                                `/setrules [כללים] - הגדרת כללי הקבוצה ושמירה בשרת`;
             await callTelegramAPI('sendMessage', { chat_id: chatId, text: helpMessage, parse_mode: 'Markdown' });
             return res.status(200).send('OK');
         }
