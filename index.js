@@ -62,13 +62,31 @@ export default async function handler(req, res) {
     const chatId = message.chat.id;
     const userId = message.from.id;
     const replyTo = message.reply_to_message;
-    const isUserAdmin = await isAdmin(chatId, userId);
-    if (text.startsWith('/start')) {
+    
+    const isPrivate = message.chat.type === 'private';
+    const isUserAdmin = isPrivate ? false : await isAdmin(chatId, userId);
+    const lowerText = text.toLowerCase();
+    if (lowerText.startsWith('/start')) {
         await callTelegramAPI('sendMessage', { chat_id: chatId, text: '🛡️ וולטיק מוד בוט מחובר ל-Firebase ומוכן לפעולה קשוחה!' });
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/kick') || text.startsWith('/בעט')) {
+    if (lowerText.startsWith('/help') || lowerText.startsWith('/עזרה')) {
+        const helpMessage = `🛡️ *מדריך פקודות וולטיק מוד בוט:*\n\n` +
+                            `👤 *פקודות כלליות:*\n` +
+                            `/rules או /כללים - הצגת כללי הקבוצה\n\n` +
+                            `👮 *פקודות מנהלים (בתוך קבוצה בלבד):*\n` +
+                            `/kick או /בעט - בעיטת משתמש (בתגובה להודעה)\n` +
+                            `/ban או /העף - חסימת משתמש (בתגובה להודעה)\n` +
+                            `/unban או /בטל חסימה - ביטול חסימה\n` +
+                            `/mute או /השתק - השתקת משתמש\n` +
+                            `/unmute או /בטל השתקה - ביטול השתקה\n` +
+                            `/setrules [כללים] - הגדרת כללי הקבוצה ושמירה ב-Firebase`;
+        await callTelegramAPI('sendMessage', { chat_id: chatId, text: helpMessage, parse_mode: 'Markdown' });
+        return res.status(200).send('OK');
+    }
+
+    if (lowerText.startsWith('/kick') || text.startsWith('/בעט')) {
         if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
         await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: replyTo.from.id });
         const unbanRes = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: replyTo.from.id, only_if_banned: true });
@@ -76,27 +94,27 @@ export default async function handler(req, res) {
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/ban') || text.startsWith('/העף')) {
+    if (lowerText.startsWith('/ban') || text.startsWith('/העף')) {
         if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
         const banRes = await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: replyTo.from.id });
         if (banRes.ok) await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔨 המשתמש נחסם לצמיתות מהקבוצה.` });
         return res.status(200).send('OK');
     }
-
-    if (text.startsWith('/unban') || text.startsWith('/בטל חסימה')) {
+    if (lowerText.startsWith('/unban') || text.startsWith('/בטל חסימה')) {
         if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
         const unbanRes = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: replyTo.from.id, only_if_banned: true });
         if (unbanRes.ok) await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ החסימה בוטלה.` });
         return res.status(200).send('OK');
     }
-    if (text.startsWith('/mute') || text.startsWith('/השתק')) {
+
+    if (lowerText.startsWith('/mute') || text.startsWith('/השתק')) {
         if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
         await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: replyTo.from.id, permissions: { can_send_messages: false } });
         await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔇 המשתמש הושתק.` });
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/unmute') || text.startsWith('/בטל השתקה')) {
+    if (lowerText.startsWith('/unmute') || text.startsWith('/בטל השתקה')) {
         if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
         const permissions = { can_send_messages: true, can_send_audios: true, can_send_documents: true, can_send_photos: true, can_send_videos: true, can_send_other_messages: true, can_add_web_page_previews: true };
         await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: replyTo.from.id, permissions });
@@ -104,9 +122,9 @@ export default async function handler(req, res) {
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/setrules') || text.startsWith('/הכנס כללים')) {
+    if (lowerText.startsWith('/setrules') || text.startsWith('/הכנס כללים')) {
         if (!isUserAdmin) return res.status(200).send('OK');
-        const newRules = text.replace('/setrules', '').replace('/הכנס כללים', '').trim();
+        const newRules = text.replace('/setrules', '').replace('/הכנס כללים', '').replace('/Setrules', '').trim();
         if (newRules) {
             await set(ref(db, `groups/${chatId}/rules`), newRules);
             await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ הכללים נשמרו בבטחה ב-Firebase.` });
@@ -114,7 +132,7 @@ export default async function handler(req, res) {
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/rules') || text.startsWith('/כללים')) {
+    if (lowerText.startsWith('/rules') || text.startsWith('/כללים')) {
         const dbRef = ref(db);
         const snapshot = await get(child(dbRef, `groups/${chatId}/rules`));
         const rulesText = snapshot.exists() ? snapshot.val() : "טרם הוגדרו כללים לקבוצה זו.";
