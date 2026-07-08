@@ -1,6 +1,20 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, child } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDyPFBNAKeH3ubyhkdvlfNvjNFal5aG4EM",
+  authDomain: "volticmodbot.firebaseapp.com",
+  databaseURL: "https://volticmodbot-default-rtdb.firebaseio.com",
+  projectId: "volticmodbot",
+  storageBucket: "volticmodbot.firebasestorage.app",
+  messagingSenderId: "904461831147",
+  appId: "1:904461831147:web:f86fa606f9fb996B05a7ae"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
-
 async function callTelegramAPI(method, payload) {
     try {
         const response = await fetch(`${TELEGRAM_API}/${method}`, {
@@ -25,153 +39,86 @@ async function isAdmin(chatId, userId) {
     return false;
 }
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(200).send('Voltic Mod Bot Server is Active.');
-    }
-    
+    if (req.method !== 'POST') return res.status(200).send('Voltic Mod Bot is active with Firebase.');
     const update = req.body;
-    if (!update || !update.message) {
+    if (!update) return res.status(200).send('OK');
+
+    if (update.message && update.message.new_chat_members) {
+        const chatId = update.message.chat.id;
+        for (const user of update.message.new_chat_members) {
+            if (user.id !== update.message.from.id) continue;
+            const dbRef = ref(db);
+            const snapshot = await get(child(dbRef, `groups/${chatId}/welcome`));
+            const welcomeText = snapshot.exists() ? snapshot.val() : `👋 ברוך הבא לקבוצה, ${user.first_name}!`;
+            await callTelegramAPI('sendMessage', { chat_id: chatId, text: welcomeText });
+        }
         return res.status(200).send('OK');
     }
+
+    if (!update.message || !update.message.text) return res.status(200).send('OK');
     
     const message = update.message;
-    const text = message.text || '';
+    const text = message.text;
     const chatId = message.chat.id;
     const userId = message.from.id;
-    const replyToMessage = message.reply_to_message;
-
-    if (text.startsWith('/start')) {
-        await callTelegramAPI('sendMessage', {
-            chat_id: chatId,
-            text: '🛡️ וולטיק מוד בוט פעיל ומוכן! תנו לי הרשאות ניהול בקבוצה ונתחיל לשמור על הסדר.',
-            reply_to_message_id: message.message_id
-        });
-        return res.status(200).send('OK');
-    }
-
+    const replyTo = message.reply_to_message;
     const isUserAdmin = await isAdmin(chatId, userId);
-
-    if (text.startsWith('/del')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (replyToMessage) {
-            await callTelegramAPI('deleteMessage', {
-                chat_id: chatId,
-                message_id: replyToMessage.message_id
-            });
-            await callTelegramAPI('deleteMessage', {
-                chat_id: chatId,
-                message_id: message.message_id
-            });
-        }
-        return res.status(200).send('OK');
-    }
-    if (text.startsWith('/ban')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה של המשתמש כדי לחסום אותו.' });
-            return res.status(200).send('OK');
-        }
-        const targetId = replyToMessage.from.id;
-        const resBan = await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: targetId });
-        if (resBan.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔨 המשתמש נחסם והורחק מהקבוצה.` });
-        }
+    if (text.startsWith('/start')) {
+        await callTelegramAPI('sendMessage', { chat_id: chatId, text: '🛡️ וולטיק מוד בוט מחובר ל-Firebase ומוכן לפעולה קשוחה!' });
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/unban')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה של המשתמש כדי לבטל חסימה.' });
-            return res.status(200).send('OK');
-        }
-        const targetId = replyToMessage.from.id;
-        const resUnban = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: targetId, only_if_banned: true });
-        if (resUnban.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ חסימת המשתמש בוטלה בהצלחה.` });
-        }
+    if (text.startsWith('/kick') || text.startsWith('/בעט')) {
+        if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
+        await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: replyTo.from.id });
+        const unbanRes = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: replyTo.from.id, only_if_banned: true });
+        if (unbanRes.ok) await callTelegramAPI('sendMessage', { chat_id: chatId, text: `👢 המשתמש נבעט מהקבוצה.` });
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/kick')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה של המשתמש כדי לבעוט אותו.' });
-            return res.status(200).send('OK');
-        }
-        const targetId = replyToMessage.from.id;
-        await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: targetId });
-        const resKick = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: targetId, only_if_banned: true });
-        if (resKick.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `👢 המשתמש נבעט מהקבוצה (הוא יוכל לחזור בעתיד עם קישור).` });
-        }
+    if (text.startsWith('/ban') || text.startsWith('/העף')) {
+        if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
+        const banRes = await callTelegramAPI('banChatMember', { chat_id: chatId, user_id: replyTo.from.id });
+        if (banRes.ok) await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔨 המשתמש נחסם לצמיתות מהקבוצה.` });
         return res.status(200).send('OK');
     }
-    if (text.startsWith('/mute')) {
+
+    if (text.startsWith('/unban') || text.startsWith('/בטל חסימה')) {
+        if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
+        const unbanRes = await callTelegramAPI('unbanChatMember', { chat_id: chatId, user_id: replyTo.from.id, only_if_banned: true });
+        if (unbanRes.ok) await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ החסימה בוטלה.` });
+        return res.status(200).send('OK');
+    }
+    if (text.startsWith('/mute') || text.startsWith('/השתק')) {
+        if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
+        await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: replyTo.from.id, permissions: { can_send_messages: false } });
+        await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔇 המשתמש הושתק.` });
+        return res.status(200).send('OK');
+    }
+
+    if (text.startsWith('/unmute') || text.startsWith('/בטל השתקה')) {
+        if (!isUserAdmin || !replyTo) return res.status(200).send('OK');
+        const permissions = { can_send_messages: true, can_send_audios: true, can_send_documents: true, can_send_photos: true, can_send_videos: true, can_send_other_messages: true, can_add_web_page_previews: true };
+        await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: replyTo.from.id, permissions });
+        await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔊 המשתמש יכול לדבר.` });
+        return res.status(200).send('OK');
+    }
+
+    if (text.startsWith('/setrules') || text.startsWith('/הכנס כללים')) {
         if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה של המשתמש כדי להשתיק אותו.' });
-            return res.status(200).send('OK');
-        }
-        const targetId = replyToMessage.from.id;
-        const permissions = {
-            can_send_messages: false, can_send_audios: false, can_send_documents: false,
-            can_send_photos: false, can_send_videos: false, can_send_video_notes: false,
-            can_send_voice_notes: false, can_send_polls: false, can_send_other_messages: false,
-            can_add_web_page_previews: false
-        };
-        const resMute = await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: targetId, permissions });
-        if (resMute.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔇 המשתמש הושתק ולא יכול לשלוח הודעות.` });
+        const newRules = text.replace('/setrules', '').replace('/הכנס כללים', '').trim();
+        if (newRules) {
+            await set(ref(db, `groups/${chatId}/rules`), newRules);
+            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ הכללים נשמרו בבטחה ב-Firebase.` });
         }
         return res.status(200).send('OK');
     }
 
-    if (text.startsWith('/unmute')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה של המשתמש כדי לבטל השתקה.' });
-            return res.status(200).send('OK');
-        }
-        const targetId = replyToMessage.from.id;
-        const permissions = {
-            can_send_messages: true, can_send_audios: true, can_send_documents: true,
-            can_send_photos: true, can_send_videos: true, can_send_video_notes: true,
-            can_send_voice_notes: true, can_send_polls: true, can_send_other_messages: true,
-            can_add_web_page_previews: true
-        };
-        const resUnmute = await callTelegramAPI('restrictChatMember', { chat_id: chatId, user_id: targetId, permissions });
-        if (resUnmute.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `🔊 המשתמש שוחרר מהשתקה ויכול לדבר.` });
-        }
-        return res.status(200).send('OK');
-    }
-    if (text.startsWith('/pin')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (!replyToMessage) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '⚠️ נא להגיב להודעה שברצונך לנעוץ.' });
-            return res.status(200).send('OK');
-        }
-        const resPin = await callTelegramAPI('pinChatMessage', { 
-            chat_id: chatId, 
-            message_id: replyToMessage.message_id,
-            disable_notification: false 
-        });
-        if (resPin.ok) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📌 ההודעה ננעצה בהצלחה.` });
-        }
-        return res.status(200).send('OK');
-    }
-
-    if (text.startsWith('/unpin')) {
-        if (!isUserAdmin) return res.status(200).send('OK');
-        if (replyToMessage) {
-            await callTelegramAPI('unpinChatMessage', { chat_id: chatId, message_id: replyToMessage.message_id });
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📍 הנעיצה בוטלה להודעה שנבחרה.` });
-        } else {
-            await callTelegramAPI('unpinAllChatMessages', { chat_id: chatId });
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📍 כל ההודעות הנעוצות בקבוצה בוטלו.` });
-        }
+    if (text.startsWith('/rules') || text.startsWith('/כללים')) {
+        const dbRef = ref(db);
+        const snapshot = await get(child(dbRef, `groups/${chatId}/rules`));
+        const rulesText = snapshot.exists() ? snapshot.val() : "טרם הוגדרו כללים לקבוצה זו.";
+        await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📜 *כללי הקבוצה:*\n${rulesText}`, parse_mode: 'Markdown' });
         return res.status(200).send('OK');
     }
 
