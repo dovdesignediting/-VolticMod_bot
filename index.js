@@ -1,24 +1,11 @@
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, get, child } from "firebase/database";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDyPFBNAKeH3ubyhkdvlfNvjNFal5aG4EM",
-  authDomain: "volticmodbot.firebaseapp.com",
-  databaseURL: "https://volticmodbot-default-rtdb.firebaseio.com",
-  projectId: "volticmodbot",
-  storageBucket: "volticmodbot.firebasestorage.app",
-  messagingSenderId: "904461831147",
-  appId: "1:904461831147:web:f86fa606f9fb996B05a7ae"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const FIREBASE_DB_URL = "https://volticmodbot-default-rtdb.firebaseio.com";
+
 async function callTelegramAPI(method, payload) {
     try {
         if (!BOT_TOKEN) {
-            console.error("ERROR: BOT_TOKEN is missing in Vercel environment variables!");
+            console.error("ERROR: BOT_TOKEN is missing!");
             return { ok: false, error: "Missing token" };
         }
         const response = await fetch(`${TELEGRAM_API}/${method}`, {
@@ -32,7 +19,6 @@ async function callTelegramAPI(method, payload) {
         return { ok: false, error };
     }
 }
-
 async function isAdmin(chatId, userId) {
     try {
         if (!chatId || !userId) return false;
@@ -50,7 +36,7 @@ async function isAdmin(chatId, userId) {
 export default async function handler(req, res) {
     try {
         if (req.method !== 'POST') {
-            return res.status(200).send('Voltic Mod Bot is active and running.');
+            return res.status(200).send('Voltic Mod Bot is active and running via REST.');
         }
         const update = req.body;
         if (!update) return res.status(200).send('No update body');
@@ -59,10 +45,12 @@ export default async function handler(req, res) {
             const chatId = update.message.chat.id;
             for (const user of update.message.new_chat_members) {
                 if (user.id !== update.message.from.id) continue;
-                const dbRef = ref(db);
-                const snapshot = await get(child(dbRef, `groups/${chatId}/welcome`));
-                const welcomeText = snapshot.exists() ? snapshot.val() : `👋 ברוך הבא לקבוצה, ${user.first_name}!`;
-                await callTelegramAPI('sendMessage', { chat_id: chatId, text: welcomeText });
+                
+                const fbRes = await fetch(`${FIREBASE_DB_URL}/groups/${chatId}/welcome.json`);
+                const welcomeText = fbRes.ok ? await fbRes.json() : null;
+                const textToSend = welcomeText || `👋 ברוך הבא לקבוצה, ${user.first_name}!`;
+                
+                await callTelegramAPI('sendMessage', { chat_id: chatId, text: textToSend });
             }
             return res.status(200).send('OK');
         }
@@ -141,17 +129,21 @@ export default async function handler(req, res) {
             else if (lowerText.startsWith('/הכנס כללים')) newRules = text.substring(11).trim();
             
             if (newRules) {
-                await set(ref(db, `groups/${chatId}/rules`), newRules);
+                await fetch(`${FIREBASE_DB_URL}/groups/${chatId}/rules.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newRules)
+                });
                 await callTelegramAPI('sendMessage', { chat_id: chatId, text: `✅ הכללים נשמרו בבטחה ב-Firebase.` });
             }
             return res.status(200).send('OK');
         }
 
         if (lowerText.startsWith('/rules') || lowerText.startsWith('/כללים')) {
-            const dbRef = ref(db);
-            const snapshot = await get(child(dbRef, `groups/${chatId}/rules`));
-            const rulesText = snapshot.exists() ? snapshot.val() : "טרם הוגדרו כללים לקבוצה זו.";
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📜 *כללי הקבוצה:*\n${rulesText}`, parse_mode: 'Markdown' });
+            const fbRes = await fetch(`${FIREBASE_DB_URL}/groups/${chatId}/rules.json`);
+            const rulesText = fbRes.ok ? await fbRes.json() : null;
+            const textToSend = rulesText || "טרם הוגדרו כללים לקבוצה זו.";
+            await callTelegramAPI('sendMessage', { chat_id: chatId, text: `📜 *כללי הקבוצה:*\n${textToSend}`, parse_mode: 'Markdown' });
             return res.status(200).send('OK');
         }
 
