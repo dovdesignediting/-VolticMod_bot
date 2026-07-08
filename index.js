@@ -67,7 +67,7 @@ export default async function handler(req, res) {
         const isUserAdmin = isPrivate ? false : await isAdmin(chatId, userId);
         const lowerText = text.toLowerCase();
         if (lowerText.startsWith('/start')) {
-            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '🛡️ וולטיק מוד בוט מחובר ל-Firebase ומוכן לפעולה קשוחה!' });
+            await callTelegramAPI('sendMessage', { chat_id: chatId, text: '🛡️ וולטיק מוד בוט מחובר לשרתי טלגרם ומוכן לפעולה. כתבו את הפקודה /help ואני אתן לך את רשימת פקודות המלאה שלי' });
             return res.status(200).send('OK');
         }
 
