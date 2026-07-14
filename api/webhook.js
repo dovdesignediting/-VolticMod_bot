@@ -442,4 +442,43 @@ module.exports = async (req, res) => {
     // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
     res.status(200).json({ ok: true });
   }
+};// ----------- נקודת הכניסה הראשית (Vercel Serverless Function) -----------
+
+module.exports = async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(200).json({ ok: true, message: "Voltic Mod Bot is running." });
+      return;
+    }
+    
+    const update = req.body;
+    
+    if (!update || !update.message) {
+      res.status(200).json({ ok: true });
+      return;
+    }
+    
+    const message = update.message;
+    
+    // טיפול בהצטרפות חברים חדשים
+    if (message.new_chat_members && message.new_chat_members.length > 0) {
+      await handleNewChatMembers(message);
+      res.status(200).json({ ok: true });
+      return;
+    }
+    
+    // טיפול בפקודות טקסט
+    if (message.text) {
+      const matched = matchCommand(message.text);
+      if (matched) {
+        await dispatchCommand(matched, message);
+      }
+    }
+    
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("שגיאה כללית בטיפול בעדכון:", error.message);
+    // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
+    res.status(200).json({ ok: true });
+  }
 };
