@@ -373,8 +373,12 @@ module.exports = async (req, res) => {
     }
 
     const update = req.body;
+    
+    // שורת הדיבוג - תציג לנו בדיוק מה טלגרם שלחה!
+    console.log("📥 התקבל עדכון חדש מטלגרם:", JSON.stringify(update, null, 2));
 
     if (!update || !update.message) {
+      console.log("⚠️ העדכון לא מכיל הודעת טקסט (אולי זו עריכה או פעולה אחרת).");
       res.status(200).json({ ok: true });
       return;
     }
@@ -383,6 +387,7 @@ module.exports = async (req, res) => {
 
     // טיפול בהצטרפות חברים חדשים
     if (message.new_chat_members && message.new_chat_members.length > 0) {
+      console.log("👋 זוהתה הצטרפות של חבר חדש!");
       await handleNewChatMembers(message);
       res.status(200).json({ ok: true });
       return;
@@ -390,94 +395,19 @@ module.exports = async (req, res) => {
 
     // טיפול בפקודות טקסט
     if (message.text) {
+      console.log("💬 הבוט קרא את הטקסט:", message.text);
       const matched = matchCommand(message.text);
       if (matched) {
+        console.log("✅ זוהתה הפקודה:", matched.command);
         await dispatchCommand(matched, message);
+      } else {
+        console.log("❌ לא זוהתה פקודה מוכרת בטקסט הזה.");
       }
     }
 
     res.status(200).json({ ok: true });
   } catch (error) {
-    console.error("שגיאה כללית בטיפול בעדכון:", error.message);
-    // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
-    res.status(200).json({ ok: true });
-  }
-};
-// ----------- נקודת הכניסה הראשית (Vercel Serverless Function) -----------
-
-module.exports = async (req, res) => {
-  try {
-    if (req.method !== "POST") {
-      res.status(200).json({ ok: true, message: "Voltic Mod Bot is running." });
-      return;
-    }
-    
-    const update = req.body;
-    
-    if (!update || !update.message) {
-      res.status(200).json({ ok: true });
-      return;
-    }
-    
-    const message = update.message;
-    
-    // טיפול בהצטרפות חברים חדשים
-    if (message.new_chat_members && message.new_chat_members.length > 0) {
-      await handleNewChatMembers(message);
-      res.status(200).json({ ok: true });
-      return;
-    }
-    
-    // טיפול בפקודות טקסט
-    if (message.text) {
-      const matched = matchCommand(message.text);
-      if (matched) {
-        await dispatchCommand(matched, message);
-      }
-    }
-    
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("שגיאה כללית בטיפול בעדכון:", error.message);
-    // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
-    res.status(200).json({ ok: true });
-  }
-};// ----------- נקודת הכניסה הראשית (Vercel Serverless Function) -----------
-
-module.exports = async (req, res) => {
-  try {
-    if (req.method !== "POST") {
-      res.status(200).json({ ok: true, message: "Voltic Mod Bot is running." });
-      return;
-    }
-    
-    const update = req.body;
-    
-    if (!update || !update.message) {
-      res.status(200).json({ ok: true });
-      return;
-    }
-    
-    const message = update.message;
-    
-    // טיפול בהצטרפות חברים חדשים
-    if (message.new_chat_members && message.new_chat_members.length > 0) {
-      await handleNewChatMembers(message);
-      res.status(200).json({ ok: true });
-      return;
-    }
-    
-    // טיפול בפקודות טקסט
-    if (message.text) {
-      const matched = matchCommand(message.text);
-      if (matched) {
-        await dispatchCommand(matched, message);
-      }
-    }
-    
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("שגיאה כללית בטיפול בעדכון:", error.message);
+    console.error("🚨 שגיאה כללית בטיפול בעדכון:", error.message);
     // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
     res.status(200).json({ ok: true });
   }
