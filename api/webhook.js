@@ -411,4 +411,5 @@ module.exports = async (req, res) => {
     // תמיד להחזיר 200 כדי שטלגרם לא ינסה לשלוח שוב ושוב
     res.status(200).json({ ok: true });
   }
-};
+}
+.
